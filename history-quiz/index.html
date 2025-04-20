@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>History Quiz</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f0f0;
+      padding: 20px;
+    }
+    #app {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .button {
+      margin: 5px;
+      padding: 10px 15px;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .button:hover {
+      background: #005fa3;
+    }
+    .hidden {
+      display: none;
+    }
+    .feedback {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>History Quiz</h1>
+
+    <div id="countryList"></div>
+    <div id="levelList" class="hidden"></div>
+
+    <div id="lesson" class="hidden">
+      <h2 id="lessonTitle"></h2>
+      <div id="lessonContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const countries = {
+      england: "England",
+      france: "France",
+      italy: "Italy",
+      japan: "Japan",
+      ottoman: "Ottoman Empire"
+    };
+
+    const levels = [
+      "Level 1: Foundations",
+      "Level 2: Conflict & Kingdoms",
+      "Level 3: Reformation & Empire",
+      "Level 4: Revolution & Reform",
+      "Level 5: Modern Times"
+    ];
+
+    let selectedCountry = "";
+    let lessonData;
+    let quizQuestions = [];
+    let currentQuestion = 0;
+    let score = 0;
+
+    const countryList = document.getElementById("countryList");
+    const levelList = document.getElementById("levelList");
+    const lessonDiv = document.getElementById("lesson");
+    const lessonTitle = document.getElementById("lessonTitle");
+    const lessonContent = document.getElementById("lessonContent");
+
+    const startQuizBtn = document.createElement("button");
+    startQuizBtn.className = "button";
+    startQuizBtn.innerText = "Start Quiz";
+    startQuizBtn.onclick = startQuiz;
+
+    for (let key in countries) {
+      const btn = document.createElement("button");
+      btn.className = "button";
+      btn.innerText = countries[key];
+      btn.onclick = () => showLevels(key);
+      countryList.appendChild(btn);
+    }
+
+    function showLevels(countryKey) {
+      selectedCountry = countryKey;
+      levelList.innerHTML = "";
+      levelList.classList.remove("hidden");
+      lessonDiv.classList.add("hidden");
+      document.getElementById("quizSection")?.remove();
+
+      levels.forEach((levelName, index) => {
+        const btn = document.createElement("button");
+        btn.className = "button";
+        btn.innerText = levelName;
+        btn.onclick = () => loadLesson(index + 1);
+        levelList.appendChild(btn);
+      });
+    }
+
+    function loadLesson(level) {
+      const jsonPath = `${selectedCountry}/${selectedCountry}-level${level}.json`;
+
+      fetch(jsonPath)
+        .then(res => res.json())
+        .then(data => {
+          lessonData = data;
+          lessonTitle.innerText = data.title || "Lesson";
+
+          if (data.readingFile) {
+            const mdPath = `${selectedCountry}/${data.readingFile}`;
+            fetch(mdPath)
+              .then(res => res.text())
+              .then(md => {
+                lessonContent.innerHTML = marked.parse(md);
+                lessonContent.appendChild(startQuizBtn);
+                lessonDiv.classList.remove("hidden");
+              });
+          } else if (data.reading) {
+            lessonContent.innerHTML = `<p>${data.reading.replaceAll("\\n", "<br><br>")}</p>`;
+            lessonContent.appendChild(startQuizBtn);
+            lessonDiv.classList.remove("hidden");
+          } else {
+            lessonContent.innerHTML = "<p>No reading content available.</p>";
+            lessonDiv.classList.remove("hidden");
+          }
+        })
+        .catch(() => {
+          lessonTitle.innerText = "Error loading lesson";
+          lessonContent.innerHTML = "<p>Make sure your JSON and Markdown files are in the correct folder.</p>";
+          lessonDiv.classList.remove("hidden");
+        });
+    }
+
+    function startQuiz() {
+      lessonDiv.classList.add("hidden");
+      document.getElementById("quizSection")?.remove();
+
+      currentQuestion = 0;
+      score = 0;
+      quizQuestions = [...lessonData.questions].sort(() => 0.5 - Math.random()).slice(0, 10);
+
+      const quizDiv = document.createElement("div");
+      quizDiv.id = "quizSection";
+      quizDiv.className = "section";
+      document.getElementById("app").appendChild(quizDiv);
+
+      loadQuestion();
+    }
+
+    function loadQuestion() {
+      const q = quizQuestions[currentQuestion];
+      const quizDiv = document.getElementById("quizSection");
+
+      quizDiv.innerHTML = `<h3>Q${currentQuestion + 1}: ${q.question}</h3>` +
+        q.choices.map(choice => `<button class="button" onclick="checkAnswer('${choice}')">${choice}</button>`).join("") +
+        `<div id="feedback" class="feedback"></div>`;
+    }
+
+    function checkAnswer(choice) {
+      const q = quizQuestions[currentQuestion];
+      const feedback = document.getElementById("feedback");
+      const buttons = document.querySelectorAll("#quizSection .button");
+
+      buttons.forEach(btn => btn.disabled = true);
+
+      if (choice === q.answer) {
+        score++;
+        feedback.innerText = "✅ Correct!";
+        feedback.style.color = "green";
+      } else {
+        feedback.innerText = `❌ Incorrect. Correct answer: ${q.answer}`;
+        feedback.style.color = "red";
+      }
+
+      setTimeout(() => {
+        currentQuestion++;
+        if (currentQuestion < quizQuestions.length) {
+          loadQuestion();
+        } else {
+          showResults();
+        }
+      }, 1200);
+    }
+
+    function showResults() {
+      const quizDiv = document.getElementById("quizSection");
+      quizDiv.innerHTML = `
+        <h2>Quiz Completed!</h2>
+        <p>Your score: ${score} / ${quizQuestions.length}</p>
+        <button class="button" onclick="showLevels(selectedCountry)">Back to Levels</button>
+      `;
+    }
+  </script>
+</body>
+</html>
